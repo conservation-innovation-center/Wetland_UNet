@@ -1,0 +1,3 @@
+[submodule "azure/scv"]
+	path = azure/scv
+	url = https://github.com/mjevans26/Satellite_ComputerVision
