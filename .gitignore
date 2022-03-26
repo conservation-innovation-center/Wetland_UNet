@@ -11,6 +11,7 @@ __pycache__/
 .config/
 *.amltmp
 .ipynb_aml_checkpoints/
+azureml-models/
 
 # Distribution / packaging
 .Python
