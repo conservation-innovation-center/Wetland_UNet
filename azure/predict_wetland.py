@@ -19,7 +19,7 @@ import json
 sys.path.append(os.path.join(sys.path[0], 'scv'))
 
 from scv.utils.model_tools import get_binary_model, weighted_bce
-from scv.utils.prediction_tools import makePredDataset, make_array_predictions, write_geotiff_prediction, write_geotiff_predictions
+from scv.utils.prediction_tools import make_pred_dataset, make_array_predictions, write_geotiff_prediction, write_geotiff_predictions
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_dir', type = str, required = True, help = 'directory containing test image(s) and mixer')
@@ -107,7 +107,7 @@ def get_weighted_bce(y_true,y_pred):
 # m = models.load_model('azureml-models/wetland-unet-basic/5/outputs/unet256.h5', custom_objects = {'get_weighted_bce': get_weighted_bce})
 # m = get_model(depth = DEPTH, optim = OPTIMIZER, loss = get_weighted_bce, mets = METRICS, bias = None)
 m = models.load_model(model_path[0], custom_objects = {'get_weighted_bce':get_weighted_bce})
-m.load_weights(weight_path[0])
+m.load_weights(weight_path[-1])
 
 # create special folders './outputs' and './logs' which automatically get saved
 os.makedirs('outputs', exist_ok = True)
@@ -115,7 +115,7 @@ os.makedirs('logs', exist_ok = True)
 out_dir = './outputs'
 log_dir = './logs'
 
-preDataset = makePredDataset(
+preDataset = make_pred_dataset(
     file_list = predFiles,
     features = BANDS,
     kernel_shape = [256, 256],

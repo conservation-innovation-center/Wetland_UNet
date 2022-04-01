@@ -159,7 +159,7 @@ if args.subset:
     eval_files = [f for f in eval_files if args.subset in f]
 # train_files = glob.glob(os.path.join(args.train_data, 'UNET_256_[A-Z]*.gz'))
 # eval_files =  glob.glob(os.path.join(args.eval_data, 'UNET_256_[A-Z]*.gz'))
-
+print(len(train_files))
 training = get_training_dataset(
         files = train_files,
         ftDict = FEATURES_DICT,
@@ -192,7 +192,7 @@ date
 # define a checkpoint callback to save best models during training
 checkpoint = tf.keras.callbacks.ModelCheckpoint(
     os.path.join(out_dir, 'best_weights_' + date + '_{epoch:02d}.hdf5'),
-    monitor='val_classes_classes_mean_iou',
+    monitor='val_classes_classes_classes_classes_classes_mean_iou',
     verbose=1,
     save_best_only=True,
     mode='max'
@@ -220,12 +220,12 @@ METRICS = {
 }
 # load our previously trained model and weights
 model_file = glob.glob(os.path.join(model_dir, '*.h5'))[0]
-weights_file = glob.glob(os.path.join(model_dir, '*.hdf5'))[0]
+weights_file = glob.glob(os.path.join(model_dir, '*.hdf5'))[-1]
 m, checkpoint = retrain_model(
     model_file = model_file,
     checkpoint = checkpoint,
     eval_data = evaluation,
-    metric = 'classes_classes_mean_iou',
+    metric = 'classes_classes_classes_classes_classes_mean_iou',
     weights_file = weights_file,
     custom_objects = {'get_weighted_bce': get_weighted_bce},
     lr = LR)
