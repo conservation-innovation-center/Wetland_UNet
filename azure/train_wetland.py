@@ -12,8 +12,9 @@ Created on Sat Jan  2 12:41:40 2021
 @author: MEvans
 """
 
-from utils import model_tools, processing
-from utils.prediction_tools import makePredDataset, callback_predictions, plot_to_image
+from scv.utils.model_tools import weighted_bce, get_binary_model
+from scv.utils.processing import get_training_dataset, get_eval_dataset
+from scv.utils.prediction_tools import make_pred_dataset, callback_predictions, plot_to_image
 from matplotlib import pyplot as plt
 import argparse
 import os
@@ -40,32 +41,69 @@ parser.add_argument('-b', '--batch', type = int, default = 16, help = 'Training 
 parser.add_argument('--size', type = int, default = 3000, help = 'Size of training dataset')
 parser.add_argument('--kernel_size', type = int, default = 256, dest = 'kernel_size', help = 'Size in pixels of incoming patches')
 parser.add_argument('--response', type = str, required = True, help = 'Name of the response variable in tfrecords')
-parser.add_argument('--bands', type = str, nargs = '+', required = False, default = ['B3_summer', 'B3_fall', 'B3_spring', 'B4_summer', 'B4_fall', 'B4_spring', 'B5_summer', 'B5_fall', 'B5_spring', 'B6_summer', 'B6_fall', 'B6_spring', 'B8_summer', 'B8_fall', 'B8_spring', 'B11_summer', 'B11_fall', 'B11_spring', 'B12_summer', 'B12_fall', 'B12_spring', 'R', 'G', 'B', 'N', 'lidar_intensity', 'geomorphons'])
+parser.add_argument('--bands', type = str, required = True, default = 'basic')
 parser.add_argument('--splits', type = int, nargs = '+', required = False, default = None )
 parser.add_argument('--one_hot_levels', type = int, nargs = '+', required = False, default = [11])
 parser.add_argument('--one_hot_names', type = str, nargs = '+', required = False, default = ['geomorphons'])
 args = parser.parse_args()
 
-ONE_HOT = dict(zip(args.one_hot_names, args.one_hot_levels))
-SPLITS = args.splits
 TRAIN_SIZE = args.size
 BATCH = args.batch
 EPOCHS = args.epochs
 BIAS = args.bias
 WEIGHT = args.weight
 LR = args.learning_rate
-BANDS = args.bands
 RESPONSE = args.response
 OPTIMIZER = tf.keras.optimizers.Adam(learning_rate=LR, beta_1=0.9, beta_2=0.999)
-DEPTH = len(BANDS)+sum(args.one_hot_levels)-len(args.one_hot_levels)
-print(BANDS)
+
+# specify surface layers
+lidar = ['lidar_intensity']
+geomorphon = ["geomorphons"]
+
+# Specify inputs (Sentinel bands) to the model
+opticalBands = ['B3', 'B4', 'B5', 'B6']
+thermalBands = ['B8', 'B11', 'B12']
+senBands = opticalBands + thermalBands
+
+# get band names for three seasons
+seasonalBands = [[band+'_summer', band + '_fall', band + '_spring'] for band in senBands]
+
+# specify NAIP bands
+naipBands = ['R', 'G', 'B', 'N']
+
+if 'wlidar' in args.bands:
+    BANDS = [item for sublist in seasonalBands for item in sublist] + naipBands + lidar
+    ONE_HOT = None
+    DEPTH = len(BANDS)
+    SPLITS = [21,4,1]
+    name = 'wlidar'
+elif 'wgeomorphon' in args.bands:
+    BANDS = [item for sublist in seasonalBands for item in sublist] + naipBands + geomorphon
+    ONE_HOT = {'geomorphons':11}
+    DEPTH = len(BANDS)+sum(ONE_HOT.values())-len(ONE_HOT.values())
+    SPLITS = [21,4]
+    name = 'wgeomorphon'
+elif 'full' in args.bands:
+    BANDS = [item for sublist in seasonalBands for item in sublist] + naipBands + lidar + geomorphon
+    ONE_HOT = {'geomorphons':11}
+    DEPTH = len(BANDS)+sum(ONE_HOT.values())-len(ONE_HOT.values())
+    SPLITS = [21,4,1]
+    name = 'full'
+else:
+    BANDS = [item for sublist in seasonalBands for item in sublist] + naipBands
+    ONE_HOT = None
+    DEPTH = len(BANDS)
+    SPLITS = [21,4]
+    name = 'basic'
+
+print('name is ', name)
+FEATURES = BANDS + [RESPONSE]
+print(FEATURES)
 
 METRICS = {
         'logits':[tf.keras.metrics.MeanSquaredError(name='mse'), tf.keras.metrics.Precision(name='precision'), tf.keras.metrics.Recall(name='recall')],
         'classes':[tf.keras.metrics.MeanIoU(num_classes=2, name = 'mean_iou')]
         }
-
-FEATURES = BANDS + [RESPONSE]
 
 # round the training data size up to nearest 100 to define buffer
 BUFFER = math.ceil(args.size/100)*100
@@ -106,7 +144,7 @@ for root, dirs, files in os.walk(args.eval_data):
 # train_files = glob.glob(os.path.join(args.train_data, 'UNET_256_[A-Z]*.gz'))
 # eval_files =  glob.glob(os.path.join(args.eval_data, 'UNET_256_[A-Z]*.gz'))
 
-training = processing.get_training_dataset(
+training = get_training_dataset(
         files = train_files,
         ftDict = FEATURES_DICT,
         features = BANDS,
@@ -117,7 +155,7 @@ training = processing.get_training_dataset(
         splits = SPLITS,
         one_hot = ONE_HOT)
 
-evaluation = processing.get_eval_dataset(
+evaluation = get_eval_dataset(
         files = eval_files,
         ftDict = FEATURES_DICT,
         features = BANDS,
@@ -128,7 +166,7 @@ evaluation = processing.get_eval_dataset(
 ## DEFINE CALLBACKS
 
 def get_weighted_bce(y_true, y_pred):
-    return model_tools.weighted_bce(y_true, y_pred, WEIGHT)
+    return weighted_bce(y_true, y_pred, WEIGHT)
 
 # get the current time
 now = datetime.now() 
@@ -137,8 +175,8 @@ date
 
 # define a checkpoint callback to save best models during training
 checkpoint = tf.keras.callbacks.ModelCheckpoint(
-    os.path.join(out_dir, 'best_weights_' + date + '.hdf5'),
-    monitor='val_mean_iou',
+    os.path.join(out_dir, 'best_weights_' + date + '_{epoch:02d}.hdf5'),
+    monitor='val_classes_mean_iou',
     verbose=1,
     save_best_only=True,
     mode='max'
@@ -165,7 +203,7 @@ with strategy.scope():
     }
 #        METRICS = [tf.keras.metrics.categorical_accuracy, tf.keras.metrics.MeanIoU(num_classes=2, name = 'mean_iou')]
     OPTIMIZER = tf.keras.optimizers.Adam(learning_rate=LR, beta_1=0.9, beta_2=0.999)
-    m = model_tools.get_model(depth = DEPTH, optim = OPTIMIZER, loss = get_weighted_bce, mets = METRICS, bias = BIAS)
+    m = get_binary_model(depth = DEPTH, optim = OPTIMIZER, loss = get_weighted_bce, mets = METRICS, bias = BIAS)
 initial_epoch = 0
 
 # if test images provided, define an image saving callback
@@ -179,7 +217,7 @@ if args.test_data:
     with open(jsonFile,) as file:
         mixer = json.load(file)
         
-    pred_data = makePredDataset(test_files, BANDS, one_hot = ONE_HOT)
+    pred_data = make_pred_dataset(test_files, BANDS, one_hot = ONE_HOT, splits = SPLITS)
     file_writer = tf.summary.create_file_writer(log_dir + '/preds')
 
     def log_pred_image(epoch, logs):

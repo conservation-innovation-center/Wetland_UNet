@@ -54,14 +54,9 @@ parser.add_argument('-b', '--batch', type = int, default = 16, help = 'Training 
 parser.add_argument('--size', type = int, default = 3000, help = 'Size of training dataset')
 parser.add_argument('--kernel_size', type = int, default = 256, dest = 'kernel_size', help = 'Size in pixels of incoming patches')
 parser.add_argument('--response', type = str, required = True, help = 'Name of the response variable in tfrecords')
-# parser.add_argument('--bands', type = str, nargs = '+', required = False, default = ['B3_summer', 'B3_fall', 'B3_spring', 'B4_summer', 'B4_fall', 'B4_spring', 'B5_summer', 'B5_fall', 'B5_spring', 'B6_summer', 'B6_fall', 'B6_spring', 'B8_summer', 'B8_fall', 'B8_spring', 'B11_summer', 'B11_fall', 'B11_spring', 'B12_summer', 'B12_fall', 'B12_spring', 'R', 'G', 'B', 'N', 'lidar_intensity', 'geomorphons'])
-parser.add_argument('--splits', type = int, nargs = '+', required = False, default = None )
-# parser.add_argument('--one_hot_levels', type = int, nargs = '+', required = False, default = [11])
-# parser.add_argument('--one_hot_names', type = str, nargs = '+', required = False, default = ['geomorphons'])
+parser.add_argument('--bands', type = str, required = True, default = 'basic')
 args = parser.parse_args()
 
-# ONE_HOT = dict(zip(args.one_hot_names, args.one_hot_levels))
-SPLITS = args.splits
 TRAIN_SIZE = args.size
 BATCH = args.batch
 EPOCHS = args.epochs
@@ -91,21 +86,25 @@ if 'wlidar' in args.model_id:
     BANDS = [item for sublist in seasonalBands for item in sublist] + naipBands + lidar
     ONE_HOT = None
     DEPTH = len(BANDS)
+    SPLITS = [21,4,1]
     name = 'wlidar'
 elif 'wgeomorphon' in args.model_id:
     BANDS = [item for sublist in seasonalBands for item in sublist] + naipBands + geomorphon
     ONE_HOT = {'geomorphons':11}
     DEPTH = len(BANDS)+sum(ONE_HOT.values())-len(ONE_HOT.values())
+    SPLITS = [21, 4]
     name = 'wgeomorphon'
 elif 'full' in args.model_id:
     BANDS = [item for sublist in seasonalBands for item in sublist] + naipBands + lidar + geomorphon
     ONE_HOT = {'geomorphons':11}
     DEPTH = len(BANDS)+sum(ONE_HOT.values())-len(ONE_HOT.values())
+    SPLITS = [21,4,1]
     name = 'full'
 else:
     BANDS = [item for sublist in seasonalBands for item in sublist] + naipBands
     ONE_HOT = None
     DEPTH = len(BANDS)
+    SPLITS = [21,4]
     name = 'basic'
 
 print('name is ', name)
@@ -142,16 +141,16 @@ i = 1
 train_files = []
 for root, dirs, files in os.walk(args.train_data):
     for f in files:
-        # if i%2==0:
+        if i%2==0:
             train_files.append(os.path.join(root, f))
-        # i+=1
+        i+=1
 i = 1
 eval_files = []
 for root, dirs, files in os.walk(args.eval_data):
     for f in files:
-        # if i%2==0:
+        if i%2==0:
             eval_files.append(os.path.join(root, f))
-        # i+=1
+        i+=1
 
 # optionally take a subset of training and eval data based on string pattern
 if args.subset:
@@ -192,7 +191,7 @@ date
 # define a checkpoint callback to save best models during training
 checkpoint = tf.keras.callbacks.ModelCheckpoint(
     os.path.join(out_dir, 'best_weights_' + date + '_{epoch:02d}.hdf5'),
-    monitor='val_classes_classes_classes_classes_classes_mean_iou',
+    monitor='val_classes_classes_mean_iou',
     verbose=1,
     save_best_only=True,
     mode='max'
@@ -225,7 +224,7 @@ m, checkpoint = retrain_model(
     model_file = model_file,
     checkpoint = checkpoint,
     eval_data = evaluation,
-    metric = 'classes_classes_classes_classes_classes_mean_iou',
+    metric = 'classes_classes_mean_iou',
     weights_file = weights_file,
     custom_objects = {'get_weighted_bce': get_weighted_bce},
     lr = LR)
