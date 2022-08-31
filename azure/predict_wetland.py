@@ -97,17 +97,20 @@ print(jsonFile[0])
 #predData = makePredDataset(predFiles, BANDS, one_hot = ONE_HOT)
 
 model_dir = Model.get_model_path(args.model_id, _workspace = ws)
-weight_path = glob.glob(join(model_dir, '*.hdf5'))
-model_path = glob.glob(join(model_dir, '*.h5'))
-print(weight_path)
+weights_list = glob.glob(join(model_dir, '*.hdf5'))
+weights_list.sort()
+weights_file = weights_list[-1]
+model_list = glob.glob(join(model_dir, '*.h5'))
+model_path = model_list[0]
+print(weights_file)
 
 def get_weighted_bce(y_true,y_pred):
   return weighted_bce(y_true, y_pred, 1)
 
 # m = models.load_model('azureml-models/wetland-unet-basic/5/outputs/unet256.h5', custom_objects = {'get_weighted_bce': get_weighted_bce})
 # m = get_model(depth = DEPTH, optim = OPTIMIZER, loss = get_weighted_bce, mets = METRICS, bias = None)
-m = models.load_model(model_path[0], custom_objects = {'get_weighted_bce':get_weighted_bce})
-m.load_weights(weight_path[-1])
+m = models.load_model(model_path, custom_objects = {'get_weighted_bce':get_weighted_bce})
+m.load_weights(weights_file)
 
 # create special folders './outputs' and './logs' which automatically get saved
 os.makedirs('outputs', exist_ok = True)
